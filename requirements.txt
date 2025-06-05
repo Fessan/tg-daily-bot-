@@ -15,6 +15,7 @@ multidict==6.4.4
 propcache==0.3.1
 pydantic==2.11.5
 pydantic_core==2.33.2
+python-dotenv==1.1.0
 typing-inspection==0.4.1
 typing_extensions==4.14.0
 tzlocal==5.3.1
