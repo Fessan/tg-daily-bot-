@@ -91,19 +91,17 @@ async def cmd_start(message: Message):
             row = await cursor.fetchone()
             print("Чат из базы:", row)
         
-            # Добавляем всех админов чата как участников (active=True)
-        added = 0  # Счётчик для вывода
+        # Добавляем всех админов как участников (active=True, is_admin=True)
+        added = 0
         async with aiosqlite.connect(DB_PATH) as db:
             for admin in admins:
                 await db.execute(
-                    "INSERT OR IGNORE INTO participants (chat_id, user_id, username, active) VALUES (?, ?, ?, ?)",
-                    (message.chat.id, admin.user.id, admin.user.username or admin.user.full_name, True)
+                    "INSERT OR IGNORE INTO participants (chat_id, user_id, username, active, is_admin) VALUES (?, ?, ?, ?, ?)",
+                    (message.chat.id, admin.user.id, admin.user.username or admin.user.full_name, True, True)
                 )
                 added += 1
             await db.commit()
-        print(f"Добавлено участников: {added}")
-
-
+        print(f"Добавлено админов: {added}")
 
     await message.answer("Бот успешно активирован! (пока только тест)")
 
