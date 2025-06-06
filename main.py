@@ -56,10 +56,38 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 @dp.message(Command("start"))
-async def start_handler(message: Message):
-    await message.answer("Бот работает! 👋")
+async def cmd_start(message: Message):
+    # Проверяем, что команда написана в групповом чате
+    if message.chat.type not in ("group", "supergroup"):
+        await message.answer("Эта команда работает только в групповых чатах.")
+        return
+
+    # Получаем список админов чата
+    admins = await bot.get_chat_administrators(message.chat.id)
+    admin_ids = [admin.user.id for admin in admins]
+
+    # Проверяем, что пользователь — админ чата
+    if message.from_user.id not in admin_ids:
+        await message.answer("Только админ чата может запускать бота.")
+        return
+    
+        # Добавляем чат в базу (если ещё не добавлен)
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT OR IGNORE INTO chats (chat_id, chat_title, daily_time) VALUES (?, ?, ?)",
+            (message.chat.id, message.chat.title, None)
+        )
+        await db.commit()
+        # Получаем чат из базы для проверки и выводим в консоль
+        async with db.execute("SELECT * FROM chats WHERE chat_id = ?", (message.chat.id,)) as cursor:
+            row = await cursor.fetchone()
+            print("Чат из базы:", row)
+
+    await message.answer("Бот успешно активирован! (пока только тест)")
+
 
 async def main():
+    await init_db()
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
