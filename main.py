@@ -8,6 +8,13 @@ import aiosqlite
 
 DB_PATH = "bot.db"  # Имя файла базы данных
 
+async def migrate_participants_table():
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("ALTER TABLE participants ADD COLUMN is_admin BOOLEAN DEFAULT FALSE;")
+        await db.commit()
+    print("Миграция завершена: поле is_admin добавлено.")
+
+
 async def init_db():
     async with aiosqlite.connect(DB_PATH) as db:
         # Таблица чатов
@@ -26,6 +33,7 @@ async def init_db():
             user_id INTEGER,
             username TEXT,
             active BOOLEAN DEFAULT TRUE,
+            is_admin BOOLEAN DEFAULT FALSE,
             PRIMARY KEY (chat_id, user_id)
         );
         """)
@@ -82,6 +90,20 @@ async def cmd_start(message: Message):
         async with db.execute("SELECT * FROM chats WHERE chat_id = ?", (message.chat.id,)) as cursor:
             row = await cursor.fetchone()
             print("Чат из базы:", row)
+        
+            # Добавляем всех админов чата как участников (active=True)
+        added = 0  # Счётчик для вывода
+        async with aiosqlite.connect(DB_PATH) as db:
+            for admin in admins:
+                await db.execute(
+                    "INSERT OR IGNORE INTO participants (chat_id, user_id, username, active) VALUES (?, ?, ?, ?)",
+                    (message.chat.id, admin.user.id, admin.user.username or admin.user.full_name, True)
+                )
+                added += 1
+            await db.commit()
+        print(f"Добавлено участников: {added}")
+
+
 
     await message.answer("Бот успешно активирован! (пока только тест)")
 
