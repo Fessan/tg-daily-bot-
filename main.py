@@ -6,6 +6,8 @@ from aiogram.filters import Command
 from dotenv import load_dotenv
 import aiosqlite
 from datetime import datetime
+from aiogram.filters import CommandObject
+
 
 DB_PATH = "bot.db"  # Имя файла базы данных
 
@@ -132,7 +134,56 @@ async def cmd_testdaily(message: Message):
         "3. Что планируете делать?"
     )
     await message.answer(daily_text)
+@dp.message(Command("exclude"))
+async def cmd_exclude(message: Message, command: CommandObject):
+    # Проверка: только в группе
+    if message.chat.type not in ("group", "supergroup"):
+        await message.answer("Эта команда только для групп.")
+        return
 
+    # Проверка: только админ может использовать
+    admins = await bot.get_chat_administrators(message.chat.id)
+    admin_ids = [admin.user.id for admin in admins]
+    if message.from_user.id not in admin_ids:
+        await message.answer("Только админ может исключать участников.")
+        return
+
+    # Получаем аргумент команды
+    if not command.args:
+        await message.answer("Укажи username или user_id (например: /exclude @username или /exclude 123456789).")
+        return
+
+    arg = command.args.strip()
+    user_id = None
+
+    # Проверяем, это user_id или username
+    if arg.isdigit():
+        user_id = int(arg)
+    else:
+        username = arg.lstrip("@")
+        # Ищем user_id по username
+        async with aiosqlite.connect(DB_PATH) as db:
+            cursor = await db.execute(
+                "SELECT user_id FROM participants WHERE chat_id = ? AND username = ?",
+                (message.chat.id, username)
+            )
+            row = await cursor.fetchone()
+            if row:
+                user_id = row[0]
+
+    if not user_id:
+        await message.answer("Пользователь не найден в базе.")
+        return
+
+    # Делаем active = False (исключаем из списка)
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE participants SET active = False WHERE chat_id = ? AND user_id = ?",
+            (message.chat.id, user_id)
+        )
+        await db.commit()
+
+    await message.answer(f"Пользователь с user_id {user_id} больше не будет получать напоминания о дэйлике.")
 
 
 @dp.message()
