@@ -186,13 +186,50 @@ async def cmd_exclude(message: Message, command: CommandObject):
     await message.answer(f"Пользователь с user_id {user_id} больше не будет получать напоминания о дэйлике.")
 
 
+
+@dp.message(Command("list_active"))
+async def cmd_list_active(message: Message):
+    # Проверка: только для группы
+    if message.chat.type not in ("group", "supergroup"):
+        await message.answer("Эта команда только для групп.")
+        return
+
+    # Проверка: только для админа
+    admins = await bot.get_chat_administrators(message.chat.id)
+    admin_ids = [admin.user.id for admin in admins]
+    if message.from_user.id not in admin_ids:
+        await message.answer("Только админ может просматривать список.")
+        return
+
+    # Получаем всех активных участников
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT user_id, username FROM participants WHERE chat_id = ? AND active = True",
+            (message.chat.id,)
+        )
+        rows = await cursor.fetchall()
+
+    if not rows:
+        await message.answer("Список активных участников пуст.")
+        return
+
+    # Формируем текст ответа
+    text = "Активные участники:\n"
+    for user_id, username in rows:
+        if username:
+            text += f"— @{username} ({user_id})\n"
+        else:
+            text += f"— user_id: {user_id}\n"
+
+    await message.answer(text)
+
+
 @dp.message()
 async def handle_reply(message: Message):
-    # Проверяем, что это reply на сообщение бота (то есть, человек отвечает на дэйлик)
     if not message.reply_to_message or message.reply_to_message.from_user.id != bot.id:
-        return  # Не reply на сообщение бота — игнорируем
+        return
 
-    # Проверяем, есть ли уже этот пользователь в базе
+    # Открываем соединение один раз на всё
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(
             "SELECT * FROM participants WHERE chat_id = ? AND user_id = ?",
@@ -200,18 +237,24 @@ async def handle_reply(message: Message):
         )
         user = await cursor.fetchone()
         if not user:
-            # Добавляем пользователя в базу с active=True
             await db.execute(
                 "INSERT INTO participants (chat_id, user_id, username, active) VALUES (?, ?, ?, ?)",
                 (message.chat.id, message.from_user.id, message.from_user.username or message.from_user.full_name, True)
             )
             await db.commit()
             print(f"Добавлен новый участник: {message.from_user.username or message.from_user.full_name}")
- # Сохраняем или обновляем отчет в daily_reports
-    today = datetime.now().strftime("%Y-%m-%d")  # Дата отчета
-    created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # Точное время
+        elif user and not user[3]:  # user[3] — это поле active
+            await db.execute(
+                "UPDATE participants SET active = True WHERE chat_id = ? AND user_id = ?",
+                (message.chat.id, message.from_user.id)
+            )
+            await db.commit()
+            print(f"Участник снова стал активным: {message.from_user.username or message.from_user.full_name}")
 
-    async with aiosqlite.connect(DB_PATH) as db:
+        # Сохраняем или обновляем отчет в daily_reports
+        today = datetime.now().strftime("%Y-%m-%d")
+        created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
         await db.execute(
             """
             INSERT INTO daily_reports
@@ -234,8 +277,8 @@ async def handle_reply(message: Message):
             )
         )
         await db.commit()
-    print(f"Сохранён отчет от {message.from_user.username or message.from_user.full_name} за {today}")
- 
+        print(f"Сохранён отчет от {message.from_user.username or message.from_user.full_name} за {today}")
+
 
 
 async def main():
