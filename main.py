@@ -106,6 +106,59 @@ async def cmd_start(message: Message):
     await message.answer("Бот успешно активирован! (пока только тест)")
 
 
+
+@dp.message(Command("testdaily"))
+async def cmd_testdaily(message: Message):
+    # Проверяем, что команда написана в групповом чате
+    if message.chat.type not in ("group", "supergroup"):
+        await message.answer("Эта команда работает только в групповых чатах.")
+        return
+
+    # Получаем список админов чата
+    admins = await bot.get_chat_administrators(message.chat.id)
+    admin_ids = [admin.user.id for admin in admins]
+
+    # Проверяем, что пользователь — админ чата
+    if message.from_user.id not in admin_ids:
+        await message.answer("Только админ чата может отправлять дэйлик.")
+        return
+
+    # Текст дэйлика
+    daily_text = (
+        "Текстовый дейлик:\n"
+        "1. Что делали?\n"
+        "2. Какие были проблемы?\n"
+        "3. Что планируете делать?"
+    )
+    await message.answer(daily_text)
+
+
+
+@dp.message()
+async def handle_reply(message: Message):
+    # Проверяем, что это reply на сообщение бота (то есть, человек отвечает на дэйлик)
+    if not message.reply_to_message or message.reply_to_message.from_user.id != bot.id:
+        return  # Не reply на сообщение бота — игнорируем
+
+    # Проверяем, есть ли уже этот пользователь в базе
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT * FROM participants WHERE chat_id = ? AND user_id = ?",
+            (message.chat.id, message.from_user.id)
+        )
+        user = await cursor.fetchone()
+        if not user:
+            # Добавляем пользователя в базу с active=True
+            await db.execute(
+                "INSERT INTO participants (chat_id, user_id, username, active) VALUES (?, ?, ?, ?)",
+                (message.chat.id, message.from_user.id, message.from_user.username or message.from_user.full_name, True)
+            )
+            await db.commit()
+            print(f"Добавлен новый участник: {message.from_user.username or message.from_user.full_name}")
+
+ 
+
+
 async def main():
     await init_db()
     await dp.start_polling(bot)
