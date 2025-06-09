@@ -224,6 +224,90 @@ async def cmd_list_active(message: Message):
     await message.answer(text)
 
 
+
+@dp.message(Command("include"))
+async def cmd_include(message: Message, command: CommandObject):
+    # Проверка: только в группе
+    if message.chat.type not in ("group", "supergroup"):
+        await message.answer("Эта команда только для групп.")
+        return
+
+    # Проверка: только админ может использовать
+    admins = await bot.get_chat_administrators(message.chat.id)
+    admin_ids = [admin.user.id for admin in admins]
+    if message.from_user.id not in admin_ids:
+        await message.answer("Только админ может возвращать участников.")
+        return
+
+    # Получаем аргумент команды
+    if not command.args:
+        await message.answer("Укажи username или user_id (например: /include @username или /include 123456789).")
+        return
+
+    arg = command.args.strip()
+    user_id = None
+    username = None
+
+    if arg.isdigit():
+        user_id = int(arg)
+    else:
+        username = arg.lstrip("@")
+
+    # Проверяем, есть ли пользователь в базе
+    async with aiosqlite.connect(DB_PATH) as db:
+        if user_id:
+            cursor = await db.execute(
+                "SELECT user_id, username FROM participants WHERE chat_id = ? AND user_id = ?",
+                (message.chat.id, user_id)
+            )
+        else:
+            cursor = await db.execute(
+                "SELECT user_id, username FROM participants WHERE chat_id = ? AND username = ?",
+                (message.chat.id, username)
+            )
+        row = await cursor.fetchone()
+
+        if row:
+            # Если есть — просто делаем active = True
+            await db.execute(
+                "UPDATE participants SET active = True WHERE chat_id = ? AND user_id = ?",
+                (message.chat.id, row[0])
+            )
+            await db.commit()
+            await message.answer(f"Пользователь с user_id {row[0]} теперь снова в списке активных.")
+        else:
+            # Если нет — пытаемся добавить (запросим через Telegram API)
+            # Нужно получить объект пользователя по username или user_id
+            tg_user = None
+            try:
+                if user_id:
+                    tg_user = await bot.get_chat_member(message.chat.id, user_id)
+                elif username:
+                    # Получаем список участников чата (только для малых групп, иначе только через админа вручную)
+                    members = await bot.get_chat_administrators(message.chat.id)
+                    for m in members:
+                        if m.user.username and m.user.username.lower() == username.lower():
+                            tg_user = m
+                            user_id = m.user.id
+                            break
+                if tg_user:
+                    await db.execute(
+                        "INSERT INTO participants (chat_id, user_id, username, active) VALUES (?, ?, ?, ?)",
+                        (
+                            message.chat.id,
+                            user_id,
+                            username if username else (tg_user.user.username if hasattr(tg_user, 'user') else tg_user.username),
+                            True
+                        )
+                    )
+                    await db.commit()
+                    await message.answer(f"Пользователь {user_id} добавлен в список активных и теперь должен сдавать отчёты.")
+                else:
+                    await message.answer("Не удалось найти пользователя в чате. Проверьте корректность user_id или username.")
+            except Exception as e:
+                await message.answer(f"Ошибка при добавлении: {e}")
+
+
 @dp.message()
 async def handle_reply(message: Message):
     if not message.reply_to_message or message.reply_to_message.from_user.id != bot.id:
