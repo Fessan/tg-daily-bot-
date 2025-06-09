@@ -5,6 +5,7 @@ from aiogram.types import Message
 from aiogram.filters import Command
 from dotenv import load_dotenv
 import aiosqlite
+from datetime import datetime
 
 DB_PATH = "bot.db"  # Имя файла базы данных
 
@@ -155,7 +156,34 @@ async def handle_reply(message: Message):
             )
             await db.commit()
             print(f"Добавлен новый участник: {message.from_user.username or message.from_user.full_name}")
+ # Сохраняем или обновляем отчет в daily_reports
+    today = datetime.now().strftime("%Y-%m-%d")  # Дата отчета
+    created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # Точное время
 
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """
+            INSERT INTO daily_reports
+                (chat_id, user_id, date, reply_to_message_id, message_id, text, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(chat_id, user_id, date) DO UPDATE SET
+                reply_to_message_id=excluded.reply_to_message_id,
+                message_id=excluded.message_id,
+                text=excluded.text,
+                created_at=excluded.created_at
+            """,
+            (
+                message.chat.id,
+                message.from_user.id,
+                today,
+                message.reply_to_message.message_id,
+                message.message_id,
+                message.text,
+                created_at
+            )
+        )
+        await db.commit()
+    print(f"Сохранён отчет от {message.from_user.username or message.from_user.full_name} за {today}")
  
 
 
