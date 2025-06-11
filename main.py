@@ -224,6 +224,44 @@ async def cmd_list_active(message: Message):
     await message.answer(text)
 
 
+@dp.message(Command("list_all"))
+async def cmd_list_all(message: Message):
+    # Проверка: только для группы
+    if message.chat.type not in ("group", "supergroup"):
+        await message.answer("Эта команда только для групп.")
+        return
+
+    # Проверка: только для админа
+    admins = await bot.get_chat_administrators(message.chat.id)
+    admin_ids = [admin.user.id for admin in admins]
+    if message.from_user.id not in admin_ids:
+        await message.answer("Только админ может просматривать список.")
+        return
+
+    # Получаем всех участников чата (active и неактивных)
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT user_id, username, active FROM participants WHERE chat_id = ?",
+            (message.chat.id,)
+        )
+        rows = await cursor.fetchall()
+
+    if not rows:
+        await message.answer("Участников пока нет в базе.")
+        return
+
+    # Формируем текст ответа
+    text = "Все участники:\n"
+    for user_id, username, active in rows:
+        active_status = "✅" if active else "❌"
+        if username:
+            text += f"{active_status} @{username} ({user_id})\n"
+        else:
+            text += f"{active_status} user_id: {user_id}\n"
+
+    await message.answer(text)
+
+
 
 @dp.message(Command("include"))
 async def cmd_include(message: Message, command: CommandObject):
