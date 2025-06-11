@@ -7,8 +7,15 @@ from dotenv import load_dotenv
 import aiosqlite
 from datetime import datetime
 from aiogram.filters import CommandObject
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from datetime import timedelta
 
 
+
+
+
+
+scheduler = AsyncIOScheduler()
 DB_PATH = "bot.db"  # Имя файла базы данных
 
 async def migrate_participants_table():
@@ -133,7 +140,61 @@ async def cmd_testdaily(message: Message):
         "2. Какие были проблемы?\n"
         "3. Что планируете делать?"
     )
-    await message.answer(daily_text)
+
+    sent = await message.answer(daily_text)
+    # Сохраняем данные для напоминания
+    last_daily_message_id = sent.message_id
+    chat_id = message.chat.id
+    date_today = datetime.now().strftime("%Y-%m-%d")
+
+    # Планируем проверку через 1 минуту (для теста)
+    scheduler.add_job(
+        check_daily_reports,
+        "date",
+        run_date=datetime.now() + timedelta(minutes=1),
+        args=[chat_id, last_daily_message_id, date_today]
+    )
+
+
+from datetime import timedelta
+
+async def check_daily_reports(chat_id, daily_message_id, date_today):
+    print(f"Запущена проверка отчетов за {date_today} в чате {chat_id}")
+    # Получаем всех активных участников
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT user_id, username FROM participants WHERE chat_id = ? AND active = True",
+            (chat_id,)
+        )
+        users = await cursor.fetchall()
+
+        # Получаем тех, кто уже сдал отчет
+        cursor = await db.execute(
+            "SELECT user_id FROM daily_reports WHERE chat_id = ? AND date = ?",
+            (chat_id, date_today)
+        )
+        reporters = {row[0] for row in await cursor.fetchall()}
+
+    # Находим неотчитавшихся
+    not_reported = [(u_id, uname) for u_id, uname in users if u_id not in reporters]
+    print("Неотчитались:", not_reported)
+    if not_reported:
+        mentions = []
+        for user_id, username in not_reported:
+            if username:
+                mentions.append(f"@{username}")
+            else:
+                mentions.append(f"[id{user_id}](tg://user?id={user_id})")
+        mention_text = " ".join(mentions)
+        text = f"{mention_text}\nЖду Текстовый Дейлик!"
+        # Отправляем напоминание в чат
+        await bot.send_message(chat_id, text, parse_mode="Markdown")
+    else:
+        print("Все сдали отчеты!")
+
+
+
+
 @dp.message(Command("exclude"))
 async def cmd_exclude(message: Message, command: CommandObject):
     # Проверка: только в группе
@@ -405,7 +466,9 @@ async def handle_reply(message: Message):
 
 async def main():
     await init_db()
+    scheduler.start()
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
