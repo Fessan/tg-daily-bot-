@@ -9,6 +9,7 @@ from datetime import datetime
 from aiogram.filters import CommandObject
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import timedelta
+from pytz import timezone
 
 
 
@@ -17,6 +18,57 @@ from datetime import timedelta
 
 scheduler = AsyncIOScheduler()
 DB_PATH = "bot.db"  # Имя файла базы данных
+
+
+import asyncio
+from pytz import timezone
+
+async def schedule_all_dailies():
+    moscow_tz = timezone("Europe/Moscow")
+    now_msk = datetime.now(moscow_tz)
+    print(f"[DEBUG] Сейчас в Москве: {now_msk.strftime('%Y-%m-%d %H:%M:%S')}")
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("SELECT chat_id, daily_time FROM chats WHERE daily_time IS NOT NULL")
+        chats = await cursor.fetchall()
+    for chat_id, daily_time in chats:
+        hour, minute = map(int, daily_time.split(":"))
+        print(f"Добавляю задачу для чата {chat_id}: {daily_time} (hour={hour}, minute={minute})")
+
+        def make_job(chat_id_inner):
+            def job():
+                now_msk = datetime.now(timezone("Europe/Moscow"))
+                print(f"[DEBUG] Сработала задача для чата {chat_id_inner} — сейчас в МСК {now_msk.strftime('%Y-%m-%d %H:%M:%S')}")
+                asyncio.create_task(send_scheduled_daily(chat_id_inner))
+            return job
+
+        scheduler.add_job(
+            make_job(chat_id),
+            "cron",
+            hour=hour,
+            minute=minute,
+            timezone=moscow_tz
+        )
+    print("Расписания дэйликов добавлены для всех чатов.")
+
+async def send_scheduled_daily(chat_id):
+    print(f"[DEBUG] send_scheduled_daily запускается для {chat_id}")
+    daily_text = (
+        "Текстовый дейлик:\n"
+        "1. Что делали?\n"
+        "2. Какие были проблемы?\n"
+        "3. Что планируете делать?"
+    )
+    sent = await bot.send_message(chat_id, daily_text)
+    last_daily_message_id = sent.message_id
+    date_today = datetime.now(timezone("Europe/Moscow")).strftime("%Y-%m-%d")
+    scheduler.add_job(
+        check_daily_reports,
+        "date",
+        run_date=datetime.now(timezone("Europe/Moscow")) + timedelta(minutes=1),  # для теста 1 минута!
+        args=[chat_id, last_daily_message_id, date_today]
+    )
+    print(f"Дэйлик отправлен по расписанию в чат {chat_id}")
+
 
 async def migrate_participants_table():
     async with aiosqlite.connect(DB_PATH) as db:
@@ -115,6 +167,44 @@ async def cmd_start(message: Message):
 
     await message.answer("Бот успешно активирован! (пока только тест)")
 
+@dp.message(Command("settime"))
+async def cmd_settime(message: Message, command: CommandObject):
+    # Проверка: только для группы
+    if message.chat.type not in ("group", "supergroup"):
+        await message.answer("Эта команда только для групп.")
+        return
+
+    # Проверка: только для админа
+    admins = await bot.get_chat_administrators(message.chat.id)
+    admin_ids = [admin.user.id for admin in admins]
+    if message.from_user.id not in admin_ids:
+        await message.answer("Только админ может менять время рассылки.")
+        return
+
+    # Проверяем аргумент (время)
+    if not command.args:
+        await message.answer("Укажи время в формате HH:MM, например: /settime 10:00")
+        return
+
+    time_str = command.args.strip()
+    # Простейшая валидация формата времени
+    try:
+        hour, minute = map(int, time_str.split(":"))
+        assert 0 <= hour < 24 and 0 <= minute < 60
+    except Exception:
+        await message.answer("Некорректный формат. Используй: /settime 10:00")
+        return
+
+    # Сохраняем в базу
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE chats SET daily_time = ? WHERE chat_id = ?",
+            (time_str, message.chat.id)
+        )
+        await db.commit()
+    await message.answer(f"Время ежедневной рассылки установлено на {time_str}.")
+
+    print(f"Чат {message.chat.id}: daily_time обновлено на {time_str}")
 
 
 @dp.message(Command("testdaily"))
@@ -461,12 +551,14 @@ async def handle_reply(message: Message):
         )
         await db.commit()
         print(f"Сохранён отчет от {message.from_user.username or message.from_user.full_name} за {today}")
-
-
+    # Добавляем реакцию к сообщению пользователя (если всё успешно)
+      # await message.reply("✅")
 
 async def main():
     await init_db()
     scheduler.start()
+    await schedule_all_dailies() 
+    print("Scheduler запущен, жду рассылки...")
     await dp.start_polling(bot)
 
 
