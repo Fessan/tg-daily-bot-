@@ -18,12 +18,15 @@ from pytz import timezone
 
 scheduler = AsyncIOScheduler()
 DB_PATH = "bot.db"  # Имя файла базы данных
+loop = None
+
 
 
 import asyncio
 from pytz import timezone
 
 async def schedule_all_dailies():
+    scheduler.remove_all_jobs()
     moscow_tz = timezone("Europe/Moscow")
     now_msk = datetime.now(moscow_tz)
     print(f"[DEBUG] Сейчас в Москве: {now_msk.strftime('%Y-%m-%d %H:%M:%S')}")
@@ -38,9 +41,10 @@ async def schedule_all_dailies():
             def job():
                 now_msk = datetime.now(timezone("Europe/Moscow"))
                 print(f"[DEBUG] Сработала задача для чата {chat_id_inner} — сейчас в МСК {now_msk.strftime('%Y-%m-%d %H:%M:%S')}")
-                asyncio.create_task(send_scheduled_daily(chat_id_inner))
+                # Используем только глобальный loop!
+                asyncio.run_coroutine_threadsafe(send_scheduled_daily(chat_id_inner), loop)
             return job
-
+        
         scheduler.add_job(
             make_job(chat_id),
             "cron",
@@ -203,6 +207,7 @@ async def cmd_settime(message: Message, command: CommandObject):
         )
         await db.commit()
     await message.answer(f"Время ежедневной рассылки установлено на {time_str}.")
+    await schedule_all_dailies()
 
     print(f"Чат {message.chat.id}: daily_time обновлено на {time_str}")
 
@@ -555,9 +560,11 @@ async def handle_reply(message: Message):
       # await message.reply("✅")
 
 async def main():
+    global loop
     await init_db()
     scheduler.start()
-    await schedule_all_dailies() 
+    await schedule_all_dailies()
+    loop = asyncio.get_event_loop()
     print("Scheduler запущен, жду рассылки...")
     await dp.start_polling(bot)
 
