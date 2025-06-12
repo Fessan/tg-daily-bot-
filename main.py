@@ -535,6 +535,66 @@ async def cmd_include(message: Message, command: CommandObject):
                 await message.answer(f"Ошибка при добавлении: {e}")
 
 
+@dp.message(Command("report"))
+async def cmd_report(message: Message, command: CommandObject):
+    # Определяем дату и чат
+    import re
+    from datetime import datetime
+
+    # Дата по умолчанию
+    today = datetime.now(timezone("Europe/Moscow")).strftime("%Y-%m-%d")
+    chat_id = None
+    date_str = today
+
+    args = (command.args or "").strip().split()
+    # В личке обязательно: /report <chat_id> [дата]
+    # В чате: /report [дата]
+    if message.chat.type == "private":
+        if not args:
+            await message.answer("Используй: /report <chat_id> [дата в формате YYYY-MM-DD]")
+            return
+        chat_id = args[0]
+        if len(args) > 1:
+            date_str = args[1]
+    else:
+        chat_id = str(message.chat.id)
+        if args:
+            date_str = args[0]
+
+    # Проверка даты
+    if not re.match(r"\d{4}-\d{2}-\d{2}", date_str):
+        await message.answer("Дата в формате YYYY-MM-DD, например: 2024-06-12")
+        return
+
+    # Собираем все отчёты
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("""
+            SELECT participants.username, participants.user_id, daily_reports.text
+            FROM daily_reports
+            JOIN participants ON
+                daily_reports.chat_id = participants.chat_id AND daily_reports.user_id = participants.user_id
+            WHERE daily_reports.chat_id = ? AND daily_reports.date = ?
+            ORDER BY participants.username, participants.user_id
+        """, (chat_id, date_str))
+        rows = await cursor.fetchall()
+
+    if not rows:
+        await message.answer("Нет отчётов за эту дату.")
+        return
+
+    text = f"Отчёты за {date_str}:\n\n"
+    for username, user_id, report in rows:
+        user_ref = f"@{username}" if username else f"user_id: {user_id}"
+        text += f"{user_ref}:\n{report}\n\n"
+
+    # Если команда из ЛС — просто выводим текст. Если в чате — лучше отправить только админу
+    if message.chat.type == "private":
+        await message.answer(text)
+    else:
+        await message.answer("Отправил вам отчёты в личку.")
+        await bot.send_message(message.from_user.id, text)
+
+
 @dp.message()
 async def handle_reply(message: Message):
     if not message.reply_to_message or message.reply_to_message.from_user.id != bot.id:
