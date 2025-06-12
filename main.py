@@ -129,6 +129,39 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
+
+@dp.message(Command("mychats"))
+async def cmd_mychats(message: Message):
+    # Обрабатываем только в ЛС
+    if message.chat.type != "private":
+        await message.answer("Эта команда работает только в личке.")
+        return
+
+    user_id = message.from_user.id
+    # Находим все чаты, где пользователь есть среди админов
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("""
+            SELECT chats.chat_id, chats.chat_title
+            FROM chats
+            JOIN participants ON chats.chat_id = participants.chat_id
+            WHERE participants.user_id = ? AND participants.active = True
+        """, (user_id,))
+        rows = await cursor.fetchall()
+
+    if not rows:
+        await message.answer("Не найдено чатов, где вы были замечены как админ или активный участник.")
+        return
+
+    text = "Ваши чаты:\n"
+    for chat_id, chat_title in rows:
+        text += f"— {chat_title or 'Без названия'}: `{chat_id}`\n"
+
+    text += "\nДля отчёта за сегодня: `/report <chat_id>`\nДля другой даты: `/report <chat_id> YYYY-MM-DD`"
+    await message.answer(text, parse_mode="Markdown")
+
+
+
+
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
     # Проверяем, что команда написана в групповом чате
