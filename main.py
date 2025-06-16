@@ -22,9 +22,6 @@ loop = None
 
 
 
-import asyncio
-from pytz import timezone
-
 async def schedule_all_dailies():
     scheduler.remove_all_jobs()
     moscow_tz = timezone("Europe/Moscow")
@@ -68,17 +65,11 @@ async def send_scheduled_daily(chat_id):
     scheduler.add_job(
         check_daily_reports,
         "date",
-        run_date=datetime.now(timezone("Europe/Moscow")) + timedelta(minutes=1),  # для теста 1 минута!
+        run_date=datetime.now(timezone("Europe/Moscow")) + timedelta(hours=2),  
         args=[chat_id, last_daily_message_id, date_today]
     )
     print(f"Дэйлик отправлен по расписанию в чат {chat_id}")
 
-
-async def migrate_participants_table():
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("ALTER TABLE participants ADD COLUMN is_admin BOOLEAN DEFAULT FALSE;")
-        await db.commit()
-    print("Миграция завершена: поле is_admin добавлено.")
 
 
 async def init_db():
