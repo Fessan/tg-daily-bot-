@@ -619,7 +619,13 @@ async def cmd_help(message: Message):
 async def handle_reply(message: Message):
     if not message.reply_to_message or message.reply_to_message.from_user.id != bot.id:
         return
-
+        # Новый кусок: разрешаем только reply на дейлик или напоминание!
+    parent_text = message.reply_to_message.text or ""
+    if not (
+        parent_text.startswith("Текстовый дейлик:") or
+        "Жду Текстовый Дейлик" in parent_text
+    ):
+        return  # Игнорируем любые другие reply на сообщения бота
     # Открываем соединение один раз на всё
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(
