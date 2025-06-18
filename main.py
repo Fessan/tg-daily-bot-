@@ -1,5 +1,6 @@
 import asyncio
 import os
+import holidays
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import Message
 from aiogram.filters import Command
@@ -11,6 +12,14 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import timedelta
 from pytz import timezone
 
+
+def is_workday():
+    today = datetime.now(timezone("Europe/Moscow")).date()
+    ru_holidays = holidays.RU(years=today.year)
+    # Суббота (5) или воскресенье (6) — выходные, а также праздники РФ
+    if today.weekday() >= 5 or today in ru_holidays:
+        return False
+    return True
 
 
 
@@ -52,6 +61,11 @@ async def schedule_all_dailies():
     print("Расписания дэйликов добавлены для всех чатов.")
 
 async def send_scheduled_daily(chat_id):
+    if not is_workday():
+        print("Сегодня выходной или праздник — дэйлик не отправляется.")
+        return  # Не слать дэйлик
+    print(f"[DEBUG] send_scheduled_daily запускается для {chat_id}")
+
     print(f"[DEBUG] send_scheduled_daily запускается для {chat_id}")
     daily_text = (
         "Текстовый дейлик:\n"
