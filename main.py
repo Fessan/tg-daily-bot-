@@ -539,32 +539,46 @@ async def cmd_include(message: Message, command: CommandObject):
             except Exception as e:
                 await message.answer(f"Ошибка при добавлении: {e}")
 
-
 @dp.message(Command("report"))
 async def cmd_report(message: Message, command: CommandObject):
-    # Определяем дату и чат
     import re
     from datetime import datetime
 
-    # Дата по умолчанию
-    today = datetime.now(timezone("Europe/Moscow")).strftime("%Y-%m-%d")
-    chat_id = None
-    date_str = today
-
-    args = (command.args or "").strip().split()
-    # В личке обязательно: /report <chat_id> [дата]
-    # В чате: /report [дата]
+    # Проверка, что только админ может вызвать команду
     if message.chat.type == "private":
+        # В ЛС: admin может получить отчёт только по чатам, где он админ
+        args = (command.args or "").strip().split()
         if not args:
             await message.answer("Используй: /report <chat_id> [дата в формате YYYY-MM-DD]")
             return
         chat_id = args[0]
+        # Проверяем, админ ли пользователь в этом чате
+        async with aiosqlite.connect(DB_PATH) as db:
+            cursor = await db.execute("""
+                SELECT 1 FROM participants
+                WHERE chat_id = ? AND user_id = ? AND active = True AND is_admin = True
+            """, (chat_id, message.from_user.id))
+            is_admin = await cursor.fetchone()
+        if not is_admin:
+            await message.answer("Команда /report доступна только администраторам указанного чата.")
+            return
+        date_str = datetime.now(timezone("Europe/Moscow")).strftime("%Y-%m-%d")
         if len(args) > 1:
             date_str = args[1]
     else:
+        # В группе: admin — это тот, кто сейчас админ через Telegram API
         chat_id = str(message.chat.id)
+        args = (command.args or "").strip().split()
         if args:
             date_str = args[0]
+        else:
+            date_str = datetime.now(timezone("Europe/Moscow")).strftime("%Y-%m-%d")
+
+        admins = await bot.get_chat_administrators(message.chat.id)
+        admin_ids = [admin.user.id for admin in admins]
+        if message.from_user.id not in admin_ids:
+            await message.answer("Команда /report доступна только администраторам этого чата.")
+            return
 
     # Проверка даты
     if not re.match(r"\d{4}-\d{2}-\d{2}", date_str):
@@ -598,6 +612,9 @@ async def cmd_report(message: Message, command: CommandObject):
     else:
         await message.answer("Отправил вам отчёты в личку.")
         await bot.send_message(message.from_user.id, text)
+
+
+
 @dp.message(Command("help"))
 async def cmd_help(message: Message):
     text = (
