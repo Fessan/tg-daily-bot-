@@ -21,6 +21,12 @@ def is_workday():
         return False
     return True
 
+async def delete_later(msg, seconds=1800):
+    await asyncio.sleep(seconds)
+    try:
+        await msg.delete()
+    except Exception:
+        pass
 
 
 
@@ -415,7 +421,13 @@ async def cmd_list_active(message: Message):
         else:
             text += f"— user_id: {user_id}\n"
 
-    await message.answer(text)
+    # В чате — отправляем только “Результат отправил вам в личку!” и удаляем через 30 мин
+    if message.chat.type in ("group", "supergroup"):
+        msg = await message.answer("Результат отправил вам в личку!")
+        asyncio.create_task(delete_later(msg, seconds=1800))
+        await bot.send_message(message.from_user.id, text)
+    else:
+        await message.answer(text)
 
 
 @dp.message(Command("list_all"))
