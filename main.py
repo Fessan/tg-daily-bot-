@@ -468,7 +468,6 @@ async def cmd_list_all(message: Message):
     await message.answer(text)
 
 
-
 @dp.message(Command("include"))
 async def cmd_include(message: Message, command: CommandObject):
     # Проверка: только в группе
@@ -497,8 +496,8 @@ async def cmd_include(message: Message, command: CommandObject):
     else:
         username = arg.lstrip("@")
 
-    # Проверяем, есть ли пользователь в базе
     async with aiosqlite.connect(DB_PATH) as db:
+        # Сначала ищем в participants
         if user_id:
             cursor = await db.execute(
                 "SELECT user_id, username FROM participants WHERE chat_id = ? AND user_id = ?",
@@ -520,36 +519,47 @@ async def cmd_include(message: Message, command: CommandObject):
             await db.commit()
             await message.answer(f"Пользователь с user_id {row[0]} теперь снова в списке активных.")
         else:
-            # Если нет — пытаемся добавить (запросим через Telegram API)
-            # Нужно получить объект пользователя по username или user_id
+            # Если нет — ищем пользователя в чате через Telegram API
             tg_user = None
             try:
                 if user_id:
-                    tg_user = await bot.get_chat_member(message.chat.id, user_id)
+                    member = await bot.get_chat_member(message.chat.id, user_id)
+                    tg_user = member.user
                 elif username:
-                    # Получаем список участников чата (только для малых групп, иначе только через админа вручную)
-                    members = await bot.get_chat_administrators(message.chat.id)
-                    for m in members:
+                    # Получаем всех участников, ищем username
+                    # Это работает только если пользователь НЕ скрывает свой username
+                    # и бот — админ!
+                    all_members = await bot.get_chat_administrators(message.chat.id)
+                    for m in all_members:
                         if m.user.username and m.user.username.lower() == username.lower():
-                            tg_user = m
+                            tg_user = m.user
                             user_id = m.user.id
                             break
+                    # Если не нашли среди админов — попробуем через get_chat_member
+                    if not tg_user:
+                        try:
+                            member = await bot.get_chat_member(message.chat.id, username)
+                            tg_user = member.user
+                            user_id = member.user.id
+                        except Exception:
+                            pass
                 if tg_user:
                     await db.execute(
-                        "INSERT INTO participants (chat_id, user_id, username, active) VALUES (?, ?, ?, ?)",
+                        "INSERT OR REPLACE INTO participants (chat_id, user_id, username, active) VALUES (?, ?, ?, ?)",
                         (
                             message.chat.id,
-                            user_id,
-                            username if username else (tg_user.user.username if hasattr(tg_user, 'user') else tg_user.username),
+                            tg_user.id,
+                            tg_user.username,
                             True
                         )
                     )
                     await db.commit()
-                    await message.answer(f"Пользователь {user_id} добавлен в список активных и теперь должен сдавать отчёты.")
+                    await message.answer(f"Пользователь @{tg_user.username or tg_user.id} добавлен в список активных и теперь должен сдавать отчёты.")
                 else:
-                    await message.answer("Не удалось найти пользователя в чате. Проверьте корректность user_id или username.")
+                    await message.answer("Не удалось найти пользователя в чате. Проверьте корректность user_id или username. Пользователь должен быть участником чата.")
             except Exception as e:
                 await message.answer(f"Ошибка при добавлении: {e}")
+
 
 @dp.message(Command("report"))
 async def cmd_report(message: Message, command: CommandObject):
