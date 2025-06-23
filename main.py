@@ -32,20 +32,31 @@ async def ensure_admins_in_db(chat_id):
     async with aiosqlite.connect(DB_PATH) as db:
         for admin in admins:
             user = admin.user
-            await db.execute(
-                "INSERT OR REPLACE INTO participants (chat_id, user_id, username, active, is_admin) VALUES (?, ?, ?, ?, ?)",
-                (
-                    chat_id,
-                    user.id,
-                    user.username or user.full_name,
-                    True,   # считаем админа активным
-                    True    # is_admin
-                )
+            # Проверяем — есть ли уже в БД
+            cursor = await db.execute(
+                "SELECT active FROM participants WHERE chat_id = ? AND user_id = ?",
+                (chat_id, user.id)
             )
+            row = await cursor.fetchone()
+            if row is not None:
+                # Уже есть — НЕ меняем active, просто обновляем username/is_admin
+                await db.execute(
+                    "UPDATE participants SET username = ?, is_admin = True WHERE chat_id = ? AND user_id = ?",
+                    (user.username or user.full_name, chat_id, user.id)
+                )
+            else:
+                # Нет в participants — добавляем с active=False (не получит дейлик!)
+                await db.execute(
+                    "INSERT INTO participants (chat_id, user_id, username, active, is_admin) VALUES (?, ?, ?, ?, ?)",
+                    (
+                        chat_id,
+                        user.id,
+                        user.username or user.full_name,
+                        False,  # неактивен по умолчанию
+                        True
+                    )
+                )
         await db.commit()
-
-
-
 
 scheduler = AsyncIOScheduler()
 DB_PATH = "bot.db"  # Имя файла базы данных
