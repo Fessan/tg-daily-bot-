@@ -460,11 +460,11 @@ async def cmd_list_active(message: Message):
     else:
         await message.answer(text)
 
-
 @dp.message(Command("list_all"))
 async def cmd_list_all(message: Message):
-        # Сначала добавим всех админов в participants
+    # Сначала добавим всех админов в participants
     await ensure_admins_in_db(message.chat.id)
+
     # Проверка: только для группы
     if message.chat.type not in ("group", "supergroup"):
         await message.answer("Эта команда только для групп.")
@@ -498,7 +498,16 @@ async def cmd_list_all(message: Message):
         else:
             text += f"{active_status} user_id: {user_id}\n"
 
-    await message.answer(text)
+    # В чате — только уведомление, сам отчёт шлём в ЛС
+    msg = await message.answer("Отправил список участников вам в личку!")
+    asyncio.create_task(delete_later(msg, seconds=1800))
+    try:
+        await bot.send_message(message.from_user.id, text)
+    except Exception:
+        await message.answer(
+            "Не удалось отправить список участников в личку. Напишите боту в ЛС (например, /start), чтобы получать личные сообщения."
+        )
+
 
 @dp.message(Command("include"))
 async def cmd_include(message: Message, command: CommandObject):
