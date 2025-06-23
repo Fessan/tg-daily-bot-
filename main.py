@@ -27,6 +27,22 @@ async def delete_later(msg, seconds=1800):
         await msg.delete()
     except Exception:
         pass
+async def ensure_admins_in_db(chat_id):
+    admins = await bot.get_chat_administrators(chat_id)
+    async with aiosqlite.connect(DB_PATH) as db:
+        for admin in admins:
+            user = admin.user
+            await db.execute(
+                "INSERT OR REPLACE INTO participants (chat_id, user_id, username, active, is_admin) VALUES (?, ?, ?, ?, ?)",
+                (
+                    chat_id,
+                    user.id,
+                    user.username or user.full_name,
+                    True,   # считаем админа активным
+                    True    # is_admin
+                )
+            )
+        await db.commit()
 
 
 
@@ -336,6 +352,8 @@ async def check_daily_reports(chat_id, daily_message_id, date_today):
 
 @dp.message(Command("exclude"))
 async def cmd_exclude(message: Message, command: CommandObject):
+        # Сначала добавим всех админов в participants
+    await ensure_admins_in_db(message.chat.id)
     # Проверка: только в группе
     if message.chat.type not in ("group", "supergroup"):
         await message.answer("Эта команда только для групп.")
@@ -389,6 +407,8 @@ async def cmd_exclude(message: Message, command: CommandObject):
 
 @dp.message(Command("list_active"))
 async def cmd_list_active(message: Message):
+        # Сначала добавим всех админов в participants
+    await ensure_admins_in_db(message.chat.id)
     # Проверка: только для группы
     if message.chat.type not in ("group", "supergroup"):
         await message.answer("Эта команда только для групп.")
@@ -432,6 +452,8 @@ async def cmd_list_active(message: Message):
 
 @dp.message(Command("list_all"))
 async def cmd_list_all(message: Message):
+        # Сначала добавим всех админов в participants
+    await ensure_admins_in_db(message.chat.id)
     # Проверка: только для группы
     if message.chat.type not in ("group", "supergroup"):
         await message.answer("Эта команда только для групп.")
@@ -467,22 +489,20 @@ async def cmd_list_all(message: Message):
 
     await message.answer(text)
 
-
 @dp.message(Command("include"))
 async def cmd_include(message: Message, command: CommandObject):
-    # Проверка: только в группе
+        # Сначала добавим всех админов в participants
+    await ensure_admins_in_db(message.chat.id)
     if message.chat.type not in ("group", "supergroup"):
         await message.answer("Эта команда только для групп.")
         return
 
-    # Проверка: только админ может использовать
     admins = await bot.get_chat_administrators(message.chat.id)
     admin_ids = [admin.user.id for admin in admins]
     if message.from_user.id not in admin_ids:
         await message.answer("Только админ может возвращать участников.")
         return
 
-    # Получаем аргумент команды
     if not command.args:
         await message.answer("Укажи username или user_id (например: /include @username или /include 123456789).")
         return
@@ -497,7 +517,7 @@ async def cmd_include(message: Message, command: CommandObject):
         username = arg.lstrip("@")
 
     async with aiosqlite.connect(DB_PATH) as db:
-        # Сначала ищем в participants
+        # 1. Пытаемся найти в базе
         if user_id:
             cursor = await db.execute(
                 "SELECT user_id, username FROM participants WHERE chat_id = ? AND user_id = ?",
@@ -511,7 +531,6 @@ async def cmd_include(message: Message, command: CommandObject):
         row = await cursor.fetchone()
 
         if row:
-            # Если есть — просто делаем active = True
             await db.execute(
                 "UPDATE participants SET active = True WHERE chat_id = ? AND user_id = ?",
                 (message.chat.id, row[0])
@@ -519,50 +538,46 @@ async def cmd_include(message: Message, command: CommandObject):
             await db.commit()
             await message.answer(f"Пользователь с user_id {row[0]} теперь снова в списке активных.")
         else:
-            # Если нет — ищем пользователя в чате через Telegram API
-            tg_user = None
+            # 2. Пытаемся найти участника через get_chat_member
             try:
+                member = None
                 if user_id:
                     member = await bot.get_chat_member(message.chat.id, user_id)
-                    tg_user = member.user
                 elif username:
-                    # Получаем всех участников, ищем username
-                    # Это работает только если пользователь НЕ скрывает свой username
-                    # и бот — админ!
-                    all_members = await bot.get_chat_administrators(message.chat.id)
-                    for m in all_members:
-                        if m.user.username and m.user.username.lower() == username.lower():
-                            tg_user = m.user
-                            user_id = m.user.id
-                            break
-                    # Если не нашли среди админов — попробуем через get_chat_member
-                    if not tg_user:
-                        try:
-                            member = await bot.get_chat_member(message.chat.id, username)
-                            tg_user = member.user
-                            user_id = member.user.id
-                        except Exception:
-                            pass
-                if tg_user:
+                    try:
+                        # get_chat_member работает и по username, если тот уникальный в чате
+                        member = await bot.get_chat_member(message.chat.id, username)
+                    except Exception:
+                        # Если вдруг username не сработал — пробуем собрать всех, у кого username совпадает (если бот увидел в чате)
+                        chat_adms = await bot.get_chat_administrators(message.chat.id)
+                        for m in chat_adms:
+                            if m.user.username and m.user.username.lower() == username.lower():
+                                member = m
+                                break
+
+                if member:
+                    user_id_to_add = member.user.id
+                    username_to_add = member.user.username
                     await db.execute(
                         "INSERT OR REPLACE INTO participants (chat_id, user_id, username, active) VALUES (?, ?, ?, ?)",
-                        (
-                            message.chat.id,
-                            tg_user.id,
-                            tg_user.username,
-                            True
-                        )
+                        (message.chat.id, user_id_to_add, username_to_add, True)
                     )
                     await db.commit()
-                    await message.answer(f"Пользователь @{tg_user.username or tg_user.id} добавлен в список активных и теперь должен сдавать отчёты.")
+                    await message.answer(f"Пользователь @{username_to_add or user_id_to_add} добавлен в список активных и теперь должен сдавать отчёты.")
                 else:
-                    await message.answer("Не удалось найти пользователя в чате. Проверьте корректность user_id или username. Пользователь должен быть участником чата.")
+                    await message.answer(
+                        "Не удалось найти пользователя в чате.\n"
+                        "Проверь корректность user_id или username и убедись, что пользователь писал в чат.\n"
+                        "Лайфхак: пусть участник просто ответит реплаем на дэйлик, чтобы бот 100% его увидел."
+                    )
             except Exception as e:
                 await message.answer(f"Ошибка при добавлении: {e}")
 
 
 @dp.message(Command("report"))
 async def cmd_report(message: Message, command: CommandObject):
+        # Сначала добавим всех админов в participants
+    await ensure_admins_in_db(message.chat.id)
     import re
     from datetime import datetime
 
