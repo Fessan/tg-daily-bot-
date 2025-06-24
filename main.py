@@ -11,6 +11,7 @@ from aiogram.filters import CommandObject
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import timedelta
 from pytz import timezone
+import html
 
 
 def is_workday():
@@ -347,16 +348,18 @@ async def check_daily_reports(chat_id, daily_message_id, date_today):
     if not_reported:
         mentions = []
         for user_id, username in not_reported:
+            # Делаем упоминание через tg://user?id=... чтобы Telegram тегал любого пользователя
             if username:
-                mentions.append(f"@{username}")
+                safe_name = html.escape(username)
             else:
-                mentions.append(f"[id{user_id}](tg://user?id={user_id})")
+                safe_name = f"user_id_{user_id}"
+            mention = f'<a href="tg://user?id={user_id}">{safe_name}</a>'
+            mentions.append(mention)
         mention_text = " ".join(mentions)
         text = f"{mention_text}\nЖду Текстовый Дейлик!"
         # Отправляем напоминание в чат
-        await bot.send_message(chat_id, text, parse_mode="Markdown")
-    else:
-        print("Все сдали отчеты!")
+        await bot.send_message(chat_id, text, parse_mode="HTML")
+
 
 
 
