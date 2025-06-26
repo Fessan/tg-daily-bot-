@@ -356,6 +356,7 @@ async def check_daily_reports(chat_id, daily_message_id, date_today):
             mention = f'<a href="tg://user?id={user_id}">{safe_name}</a>'
             mentions.append(mention)
         mention_text = " ".join(mentions)
+        print(f"[DEBUG] check_daily_reports запускается для чата {chat_id} на дату {date_today}")
         text = f"{mention_text}\nЖду Текстовый Дейлик!"
         # Отправляем напоминание в чат
         await bot.send_message(chat_id, text, parse_mode="HTML")
