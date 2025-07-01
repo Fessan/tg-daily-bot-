@@ -292,7 +292,6 @@ async def cmd_testdaily(message: Message):
     )
 
 
-from datetime import timedelta
 
 async def check_daily_reports(chat_id, daily_message_id, date_today):
     print(f"Запущена проверка отчетов за {date_today} в чате {chat_id}")
