@@ -12,6 +12,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import timedelta
 from pytz import timezone
 import html
+from db import init_db, ensure_admins_in_db, DB_PATH
 
 
 def is_workday():
@@ -28,40 +29,8 @@ async def delete_later(msg, seconds=1800):
         await msg.delete()
     except Exception:
         pass
-async def ensure_admins_in_db(chat_id):
-    admins = await bot.get_chat_administrators(chat_id)
-    async with aiosqlite.connect(DB_PATH) as db:
-        for admin in admins:
-            user = admin.user
-            # Проверяем — есть ли уже в БД
-            cursor = await db.execute(
-                "SELECT active FROM participants WHERE chat_id = ? AND user_id = ?",
-                (chat_id, user.id)
-            )
-            row = await cursor.fetchone()
-            if row is not None:
-                # Уже есть — НЕ меняем active, просто обновляем username/is_admin
-                await db.execute(
-                    "UPDATE participants SET username = ?, is_admin = True WHERE chat_id = ? AND user_id = ?",
-                    (user.username or user.full_name, chat_id, user.id)
-                )
-            else:
-                # Нет в participants — добавляем с active=False (не получит дейлик!)
-                await db.execute(
-                    "INSERT INTO participants (chat_id, user_id, username, active, is_admin) VALUES (?, ?, ?, ?, ?)",
-                    (
-                        chat_id,
-                        user.id,
-                        user.username or user.full_name,
-                        False,  # неактивен по умолчанию
-                        True
-                    )
-                )
-        await db.commit()
 
 scheduler = AsyncIOScheduler()
-DB_PATH = "bot.db"  # Имя файла базы данных
-loop = None
 
 
 
@@ -367,7 +336,7 @@ async def check_daily_reports(chat_id, daily_message_id, date_today):
 @dp.message(Command("exclude"))
 async def cmd_exclude(message: Message, command: CommandObject):
         # Сначала добавим всех админов в participants
-    await ensure_admins_in_db(message.chat.id)
+    await ensure_admins_in_db(bot, message.chat.id)
     # Проверка: только в группе
     if message.chat.type not in ("group", "supergroup"):
         await message.answer("Эта команда только для групп.")
@@ -422,7 +391,7 @@ async def cmd_exclude(message: Message, command: CommandObject):
 @dp.message(Command("list_active"))
 async def cmd_list_active(message: Message):
         # Сначала добавим всех админов в participants
-    await ensure_admins_in_db(message.chat.id)
+    await ensure_admins_in_db(bot, message.chat.id)
     # Проверка: только для группы
     if message.chat.type not in ("group", "supergroup"):
         await message.answer("Эта команда только для групп.")
@@ -455,7 +424,7 @@ async def cmd_list_active(message: Message):
         else:
             text += f"— user_id: {user_id}\n"
 
-    # В чате — отправляем только “Результат отправил вам в личку!” и удаляем через 30 мин
+    # В чате — отправляем только "Результат отправил вам в личку!" и удаляем через 30 мин
     if message.chat.type in ("group", "supergroup"):
         msg = await message.answer("Результат отправил вам в личку!")
         asyncio.create_task(delete_later(msg, seconds=1800))
@@ -466,7 +435,7 @@ async def cmd_list_active(message: Message):
 @dp.message(Command("list_all"))
 async def cmd_list_all(message: Message):
     # Сначала добавим всех админов в participants
-    await ensure_admins_in_db(message.chat.id)
+    await ensure_admins_in_db(bot, message.chat.id)
 
     # Проверка: только для группы
     if message.chat.type not in ("group", "supergroup"):
@@ -515,7 +484,7 @@ async def cmd_list_all(message: Message):
 @dp.message(Command("include"))
 async def cmd_include(message: Message, command: CommandObject):
         # Сначала добавим всех админов в participants
-    await ensure_admins_in_db(message.chat.id)
+    await ensure_admins_in_db(bot, message.chat.id)
     if message.chat.type not in ("group", "supergroup"):
         await message.answer("Эта команда только для групп.")
         return
@@ -600,7 +569,7 @@ async def cmd_include(message: Message, command: CommandObject):
 @dp.message(Command("report"))
 async def cmd_report(message: Message, command: CommandObject):
         # Сначала добавим всех админов в participants
-    await ensure_admins_in_db(message.chat.id)
+    await ensure_admins_in_db(bot, message.chat.id)
     import re
     from datetime import datetime
 
