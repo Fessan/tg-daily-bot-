@@ -15,7 +15,8 @@ from config import (
     DAILY_CHECK_INTERVAL_HOURS,
     MAX_MENTIONS_PER_MESSAGE
 )
-from bot_instance import bot, scheduler, loop
+import bot_instance
+from bot_instance import bot, scheduler
 from utils import is_workday
 
 logger = logging.getLogger(__name__)
@@ -49,8 +50,8 @@ async def schedule_all_dailies():
                     f"Сработала задача для чата {chat_id_inner} — "
                     f"сейчас в МСК {now_msk.strftime('%Y-%m-%d %H:%M:%S')}"
                 )
-                # Используем только глобальный loop!
-                asyncio.run_coroutine_threadsafe(send_scheduled_daily(chat_id_inner), loop)
+                # Используем глобальный loop из bot_instance
+                asyncio.run_coroutine_threadsafe(send_scheduled_daily(chat_id_inner), bot_instance.loop)
             return job
         
         scheduler.add_job(

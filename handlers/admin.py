@@ -77,7 +77,7 @@ async def cmd_settime(message: Message, command: CommandObject):
 
     # Проверяем аргумент (время)
     if not command.args:
-        await message.answer("Укажи время в формате HH:MM, например: /settime 10:00")
+        await message.answer("Укажи время в формате HH:MM по московскому времени (МСК), например: /settime 10:00")
         return
 
     time_str = command.args.strip()
@@ -86,7 +86,7 @@ async def cmd_settime(message: Message, command: CommandObject):
         hour, minute = map(int, time_str.split(":"))
         assert 0 <= hour < 24 and 0 <= minute < 60
     except Exception:
-        await message.answer("Некорректный формат. Используй: /settime 10:00")
+        await message.answer("Некорректный формат. Используй: /settime 10:00 (время по МСК)")
         return
 
     # Сохраняем в базу
@@ -97,7 +97,7 @@ async def cmd_settime(message: Message, command: CommandObject):
         )
         await db.commit()
     
-    await message.answer(f"Время ежедневной рассылки установлено на {time_str}.")
+    await message.answer(f"✅ Время ежедневной рассылки установлено на {time_str} (МСК).\nДэйлик будет отправляться автоматически каждый рабочий день.")
     await schedule_all_dailies()
 
     logger.info(f"Чат {message.chat.id}: daily_time обновлено на {time_str}")
