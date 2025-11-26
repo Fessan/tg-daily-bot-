@@ -20,72 +20,66 @@ async def init_db():
         );
         """)
         
-        # Проверяем текущую версию
+        # Всегда создаем таблицы (IF NOT EXISTS безопасен)
+        await db.execute("""
+        CREATE TABLE IF NOT EXISTS chats (
+            chat_id INTEGER PRIMARY KEY,
+            chat_title TEXT,
+            daily_time TEXT
+        );
+        """)
+        
+        await db.execute("""
+        CREATE TABLE IF NOT EXISTS participants (
+            chat_id INTEGER,
+            user_id INTEGER,
+            username TEXT,
+            active BOOLEAN DEFAULT TRUE,
+            is_admin BOOLEAN DEFAULT FALSE,
+            PRIMARY KEY (chat_id, user_id)
+        );
+        """)
+        
+        await db.execute("""
+        CREATE TABLE IF NOT EXISTS daily_reports (
+            chat_id INTEGER,
+            user_id INTEGER,
+            date TEXT,
+            reply_to_message_id INTEGER,
+            message_id INTEGER,
+            text TEXT,
+            created_at TEXT,
+            PRIMARY KEY (chat_id, user_id, date)
+        );
+        """)
+        
+        # Создаем индексы для оптимизации запросов
+        await db.execute("""
+        CREATE INDEX IF NOT EXISTS idx_daily_reports_date 
+        ON daily_reports(chat_id, date)
+        """)
+        
+        await db.execute("""
+        CREATE INDEX IF NOT EXISTS idx_participants_active 
+        ON participants(chat_id, active)
+        """)
+        
+        await db.execute("""
+        CREATE INDEX IF NOT EXISTS idx_participants_username 
+        ON participants(chat_id, username)
+        """)
+        
+        # Проверяем/обновляем версию схемы
         cursor = await db.execute("SELECT version FROM schema_version ORDER BY version DESC LIMIT 1")
         row = await cursor.fetchone()
         current_version = row[0] if row else 0
         
         if current_version < DB_VERSION:
             logger.info(f"Обновление схемы БД с версии {current_version} до {DB_VERSION}")
-            
-            # Создаем таблицы
-            await db.execute("""
-            CREATE TABLE IF NOT EXISTS chats (
-                chat_id INTEGER PRIMARY KEY,
-                chat_title TEXT,
-                daily_time TEXT
-            );
-            """)
-            
-            await db.execute("""
-            CREATE TABLE IF NOT EXISTS participants (
-                chat_id INTEGER,
-                user_id INTEGER,
-                username TEXT,
-                active BOOLEAN DEFAULT TRUE,
-                is_admin BOOLEAN DEFAULT FALSE,
-                PRIMARY KEY (chat_id, user_id)
-            );
-            """)
-            
-            await db.execute("""
-            CREATE TABLE IF NOT EXISTS daily_reports (
-                chat_id INTEGER,
-                user_id INTEGER,
-                date TEXT,
-                reply_to_message_id INTEGER,
-                message_id INTEGER,
-                text TEXT,
-                created_at TEXT,
-                PRIMARY KEY (chat_id, user_id, date)
-            );
-            """)
-            
-            # Создаем индексы для оптимизации запросов
-            logger.info("Создание индексов...")
-            
-            # Индекс для быстрого поиска отчетов по дате
-            await db.execute("""
-            CREATE INDEX IF NOT EXISTS idx_daily_reports_date 
-            ON daily_reports(chat_id, date)
-            """)
-            
-            # Индекс для быстрого поиска активных участников
-            await db.execute("""
-            CREATE INDEX IF NOT EXISTS idx_participants_active 
-            ON participants(chat_id, active)
-            """)
-            
-            # Индекс для поиска по username
-            await db.execute("""
-            CREATE INDEX IF NOT EXISTS idx_participants_username 
-            ON participants(chat_id, username)
-            """)
-            
-            # Обновляем версию схемы
             if current_version == 0:
                 await db.execute("INSERT INTO schema_version (version) VALUES (?)", (DB_VERSION,))
-            
+            else:
+                await db.execute("INSERT INTO schema_version (version) VALUES (?)", (DB_VERSION,))
             logger.info(f"✅ База данных успешно инициализирована (версия {DB_VERSION})")
         else:
             logger.info(f"База данных актуальна (версия {current_version})")
