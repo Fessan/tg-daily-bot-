@@ -5,3 +5,22 @@ __pycache__/
 bot.db
 bot.log
 
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.db-journal
+*.db-wal
+*.db-shm
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+

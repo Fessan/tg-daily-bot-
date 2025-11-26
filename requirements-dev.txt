@@ -1,0 +1,27 @@
+# Зависимости для разработки и тестирования
+
+# Основные зависимости (из requirements.txt)
+-r requirements.txt
+
+# Тестирование
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+
+# Mock для Telegram API
+aiogram-tests==1.1.2
+
+# Линтеры и форматтеры
+flake8==6.1.0
+black==23.12.1
+isort==5.13.2
+mypy==1.7.1
+
+# Проверка типов
+types-aiofiles==23.2.0.20240106
+
+# Утилиты для тестирования
+faker==21.0.0
+freezegun==1.4.0
+
