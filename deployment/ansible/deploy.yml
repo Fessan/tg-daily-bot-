@@ -37,6 +37,16 @@
         state: present
       when: ansible_os_family == "Debian"
 
+    - name: Установка Python-зависимостей для community.docker
+      pip:
+        name:
+          - docker
+          - requests
+          - requests-unixsocket
+        executable: pip3
+        state: present
+      become: yes
+
     # ============================================================
     # 2. УСТАНОВКА DOCKER
     # ============================================================
