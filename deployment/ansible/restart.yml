@@ -1,0 +1,34 @@
+---
+# Playbook для перезапуска бота
+# Использование: ansible-playbook -i inventory.ini restart.yml
+
+- name: Restart Telegram Daily Bot
+  hosts: production
+  become: yes
+  gather_facts: no
+
+  tasks:
+    - name: Перезапуск контейнера
+      community.docker.docker_compose_v2:
+        project_src: "{{ project_path }}"
+        state: restarted
+      become_user: "{{ project_user }}"
+
+    - name: Ожидание запуска
+      wait_for:
+        timeout: 10
+      delegate_to: localhost
+
+    - name: Проверка статуса
+      community.docker.docker_container_info:
+        name: "{{ project_name }}"
+      register: container_info
+      become_user: "{{ project_user }}"
+
+    - name: Результат
+      debug:
+        msg:
+          - "✅ Бот перезапущен"
+          - "Статус: {{ container_info.container.State.Status }}"
+          - "Запущен: {{ container_info.container.State.StartedAt }}"
+

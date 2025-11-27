@@ -1,0 +1,28 @@
+---
+# Playbook для остановки бота
+# Использование: ansible-playbook -i inventory.ini stop.yml
+
+- name: Stop Telegram Daily Bot
+  hosts: production
+  become: yes
+  gather_facts: no
+
+  tasks:
+    - name: Остановка контейнера
+      community.docker.docker_compose_v2:
+        project_src: "{{ project_path }}"
+        state: stopped
+      become_user: "{{ project_user }}"
+
+    - name: Проверка статуса
+      community.docker.docker_container_info:
+        name: "{{ project_name }}"
+      register: container_info
+      become_user: "{{ project_user }}"
+      ignore_errors: yes
+
+    - name: Результат
+      debug:
+        msg: "✅ Бот остановлен"
+      when: container_info.exists == false or container_info.container.State.Status != "running"
+

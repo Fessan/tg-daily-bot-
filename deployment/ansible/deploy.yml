@@ -1,0 +1,320 @@
+---
+# Playbook для деплоя Telegram Daily Bot
+# Использование: ansible-playbook -i inventory.ini deploy.yml
+
+- name: Deploy Telegram Daily Bot
+  hosts: production
+  become: yes
+  gather_facts: yes
+
+  vars:
+    docker_users:
+      - "{{ project_user }}"
+
+  tasks:
+    # ============================================================
+    # 1. ПОДГОТОВКА СИСТЕМЫ
+    # ============================================================
+    
+    - name: Обновление apt кэша
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+
+    - name: Установка необходимых пакетов
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - git
+          - python3
+          - python3-pip
+          - acl  # для ansible become_user
+        state: present
+      when: ansible_os_family == "Debian"
+
+    # ============================================================
+    # 2. УСТАНОВКА DOCKER
+    # ============================================================
+
+    - name: Проверка установлен ли Docker
+      command: docker --version
+      register: docker_check
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Добавление GPG ключа Docker
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+      when: 
+        - ansible_os_family == "Debian"
+        - docker_check.rc != 0
+
+    - name: Добавление Docker репозитория
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable"
+        state: present
+      when:
+        - ansible_os_family == "Debian"
+        - docker_check.rc != 0
+
+    - name: Установка Docker
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: yes
+      when:
+        - ansible_os_family == "Debian"
+        - docker_check.rc != 0
+
+    - name: Запуск и включение Docker
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Создание группы docker (если не существует)
+      group:
+        name: docker
+        state: present
+
+    # ============================================================
+    # 3. СОЗДАНИЕ ПОЛЬЗОВАТЕЛЯ И ДИРЕКТОРИЙ
+    # ============================================================
+
+    - name: Создание пользователя для деплоя
+      user:
+        name: "{{ project_user }}"
+        groups: docker
+        append: yes
+        shell: /bin/bash
+        create_home: yes
+
+    - name: Создание директорий проекта (когда не используется Git)
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ project_user }}"
+        group: "{{ project_group }}"
+        mode: '0755'
+      loop:
+        - "{{ project_path }}"
+        - "{{ data_dir }}"
+        - "{{ logs_dir }}"
+        - "{{ backup_dir }}"
+      when: git_repo is not defined or git_repo == ""
+
+    # ============================================================
+    # 4. ДЕПЛОЙ КОДА
+    # ============================================================
+
+    - name: Удаление существующего каталога проекта перед Git (если используется Git)
+      file:
+        path: "{{ project_path }}"
+        state: absent
+      when: git_repo is defined and git_repo != ""
+
+    - name: Debug git variables (repo + branch)
+      debug:
+        msg:
+          - "git_repo={{ git_repo|default('unset') }}"
+          - "git_branch={{ git_branch|default('unset') }}"
+          - "project_path={{ project_path }}"
+      when: git_repo is defined and git_repo != ""
+
+    - name: Клонирование/обновление репозитория (если используется Git)
+      git:
+        repo: "{{ git_repo }}"
+        dest: "{{ project_path }}"
+        version: "{{ git_branch }}"
+        force: yes
+      when: git_repo is defined and git_repo != ""
+
+    - name: Show repo contents after Git clone
+      command: ls -al "{{ project_path }}"
+      register: repo_listing
+      changed_when: false
+      when: git_repo is defined and git_repo != ""
+
+    - name: Debug repo contents (after clone)
+      debug:
+        msg: "{{ repo_listing.stdout_lines }}"
+      when: git_repo is defined and git_repo != ""
+
+    - name: Установка прав на файлы проекта после Git
+      file:
+        path: "{{ project_path }}"
+        owner: "{{ project_user }}"
+        group: "{{ project_group }}"
+        recurse: yes
+      when: git_repo is defined and git_repo != ""
+
+    - name: Создание директорий данных и логов после Git
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ project_user }}"
+        group: "{{ project_group }}"
+        mode: '0755'
+      loop:
+        - "{{ data_dir }}"
+        - "{{ logs_dir }}"
+        - "{{ backup_dir }}"
+
+    - name: Копирование файлов проекта (если без Git)
+      synchronize:
+        src: ../../../
+        dest: "{{ project_path }}"
+        delete: yes
+        rsync_opts:
+          - "--exclude=.git"
+          - "--exclude=venv"
+          - "--exclude=__pycache__"
+          - "--exclude=*.pyc"
+          - "--exclude=.env"
+          - "--exclude=bot.db"
+          - "--exclude=bot.log"
+          - "--exclude=deployment"
+      become_user: "{{ project_user }}"
+      when: git_repo is not defined or git_repo == ""
+
+    - name: Установка прав на файлы проекта
+      file:
+        path: "{{ project_path }}"
+        owner: "{{ project_user }}"
+        group: "{{ project_group }}"
+        recurse: yes
+
+    # ============================================================
+    # 5. НАСТРОЙКА ОКРУЖЕНИЯ
+    # ============================================================
+
+    - name: Создание .env файла
+      template:
+        src: templates/env.j2
+        dest: "{{ project_path }}/.env"
+        owner: "{{ project_user }}"
+        group: "{{ project_group }}"
+        mode: '0600'
+
+    - name: Проверка docker-compose.yml
+      stat:
+        path: "{{ project_path }}/docker-compose.yml"
+      register: compose_file
+
+    - name: Debug docker-compose stat
+      debug:
+        var: compose_file
+
+    - name: Проверка наличия docker-compose.yml
+      fail:
+        msg: "Файл docker-compose.yml не найден в {{ project_path }}"
+      when: not compose_file.stat.exists
+
+    # ============================================================
+    # 6. БЭКАП ПЕРЕД ДЕПЛОЕМ
+    # ============================================================
+
+    - name: Проверка существования базы данных
+      stat:
+        path: "{{ data_dir }}/bot.db"
+      register: db_file
+
+    - name: Создание бэкапа базы данных
+      copy:
+        src: "{{ data_dir }}/bot.db"
+        dest: "{{ backup_dir }}/bot.db.{{ ansible_date_time.iso8601_basic_short }}"
+        remote_src: yes
+        owner: "{{ project_user }}"
+        group: "{{ project_group }}"
+      when: 
+        - db_file.stat.exists
+        - backup_enabled | default(true)
+
+    # ============================================================
+    # 7. ОСТАНОВКА СТАРОГО КОНТЕЙНЕРА
+    # ============================================================
+
+    - name: Остановка и удаление старых контейнеров
+      community.docker.docker_compose_v2:
+        project_src: "{{ project_path }}"
+        state: absent
+      become_user: "{{ project_user }}"
+      ignore_errors: yes
+
+    # ============================================================
+    # 8. СБОРКА И ЗАПУСК
+    # ============================================================
+
+    - name: Сборка Docker образа
+      community.docker.docker_compose_v2:
+        project_src: "{{ project_path }}"
+        build: always
+      become_user: "{{ project_user }}"
+
+    - name: Запуск контейнера
+      community.docker.docker_compose_v2:
+        project_src: "{{ project_path }}"
+        state: present
+      become_user: "{{ project_user }}"
+
+    # ============================================================
+    # 9. ПРОВЕРКА ЗДОРОВЬЯ
+    # ============================================================
+
+    - name: Ожидание запуска контейнера
+      wait_for:
+        timeout: 30
+      delegate_to: localhost
+
+    - name: Проверка статуса контейнера
+      community.docker.docker_container_info:
+        name: "{{ project_name }}"
+      register: container_info
+      become_user: "{{ project_user }}"
+
+    - name: Проверка что контейнер запущен
+      fail:
+        msg: "Контейнер не запустился"
+      when: container_info.container.State.Status != "running"
+
+    - name: Отображение статуса деплоя
+      debug:
+        msg: 
+          - "✅ Деплой успешно завершен!"
+          - "Контейнер: {{ container_info.container.Name }}"
+          - "Статус: {{ container_info.container.State.Status }}"
+          - "Запущен: {{ container_info.container.State.StartedAt }}"
+          - "Логи: docker logs {{ project_name }}"
+
+    # ============================================================
+    # 10. ОЧИСТКА СТАРЫХ БЭКАПОВ
+    # ============================================================
+
+    - name: Очистка старых бэкапов
+      find:
+        paths: "{{ backup_dir }}"
+        patterns: "bot.db.*"
+        age: "{{ backup_retention_days }}d"
+      register: old_backups
+      when: backup_enabled | default(true)
+
+    - name: Удаление старых бэкапов
+      file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ old_backups.files }}"
+      when: 
+        - backup_enabled | default(true)
+        - old_backups.files is defined
+

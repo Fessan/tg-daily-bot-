@@ -1,0 +1,19 @@
+---
+# Переменные для production окружения
+
+# Production специфичные настройки
+git_branch: main
+
+# Ограничения ресурсов для production
+docker_memory_limit: 512m
+docker_cpu_limit: "0.5"
+
+# Логирование
+log_level: INFO
+
+# Автозапуск
+restart_policy: unless-stopped
+
+# Мониторинг
+monitoring_enabled: true
+

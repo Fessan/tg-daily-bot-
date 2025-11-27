@@ -1,0 +1,30 @@
+---
+# Playbook для просмотра логов бота
+# Использование: ansible-playbook -i inventory.ini logs.yml
+
+- name: Show Telegram Daily Bot Logs
+  hosts: production
+  become: yes
+  gather_facts: no
+
+  vars:
+    log_lines: 50  # Количество строк для вывода
+
+  tasks:
+    - name: Получение логов контейнера
+      command: "docker logs --tail {{ log_lines }} {{ project_name }}"
+      register: container_logs
+      become_user: "{{ project_user }}"
+      changed_when: false
+
+    - name: Отображение логов
+      debug:
+        msg: "{{ container_logs.stdout_lines }}"
+
+    - name: Информация о логах
+      debug:
+        msg:
+          - "Последние {{ log_lines }} строк логов"
+          - "Для просмотра всех логов: docker logs {{ project_name }}"
+          - "Для следования за логами: docker logs -f {{ project_name }}"
+

@@ -1,0 +1,57 @@
+services:
+  tg-daily-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tg-daily-bot
+    restart: unless-stopped
+    
+    # Переменные окружения из .env файла
+    env_file:
+      - .env
+    
+    # Постоянное хранение данных
+    volumes:
+      # База данных SQLite
+      - ./data:/app/data
+      # Логи приложения
+      - ./logs:/app/logs
+    
+    # Логирование контейнера
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # Метки для идентификации
+    labels:
+      - "project=tg-daily-bot"
+      - "environment=production"
+    
+    # Настройки безопасности
+    security_opt:
+      - no-new-privileges:true
+    
+    # Ограничения ресурсов (опционально, раскомментируйте при необходимости)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '0.5'
+    #       memory: 512M
+    #     reservations:
+    #       cpus: '0.25'
+    #       memory: 256M
+
+# Создание named volumes для удобства бэкапа
+volumes:
+  bot-data:
+    driver: local
+  bot-logs:
+    driver: local
+
+networks:
+  default:
+    name: tg-daily-bot-network
+    driver: bridge
+

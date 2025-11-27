@@ -1,0 +1,82 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Documentation
+*.md
+docs/
+
+# Tests
+tests/
+test_*.py
+*_test.py
+pytest.ini
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Development dependencies
+requirements-dev.txt
+setup.py
+
+# Database and logs (будут монтироваться через volumes)
+bot.db
+bot.log
+*.db
+*.log
+data/
+logs/
+
+# Environment files (не должны попасть в образ)
+.env
+.env.*
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+Jenkinsfile
+
+# Ansible (не нужны в образе)
+ansible/
+deployment/
+*.yml
+inventory.ini
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.tmp
+

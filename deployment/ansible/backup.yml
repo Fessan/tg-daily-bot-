@@ -1,0 +1,46 @@
+---
+# Playbook для создания бэкапа базы данных
+# Использование: ansible-playbook -i inventory.ini backup.yml
+
+- name: Backup Telegram Daily Bot Database
+  hosts: production
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: Проверка существования базы данных
+      stat:
+        path: "{{ data_dir }}/bot.db"
+      register: db_file
+
+    - name: Создание бэкапа
+      copy:
+        src: "{{ data_dir }}/bot.db"
+        dest: "{{ backup_dir }}/bot.db.{{ ansible_date_time.iso8601_basic_short }}"
+        remote_src: yes
+        owner: "{{ project_user }}"
+        group: "{{ project_group }}"
+      when: db_file.stat.exists
+
+    - name: Создание бэкапа логов
+      copy:
+        src: "{{ logs_dir }}/bot.log"
+        dest: "{{ backup_dir }}/bot.log.{{ ansible_date_time.iso8601_basic_short }}"
+        remote_src: yes
+        owner: "{{ project_user }}"
+        group: "{{ project_group }}"
+      when: db_file.stat.exists
+      ignore_errors: yes
+
+    - name: Список бэкапов
+      find:
+        paths: "{{ backup_dir }}"
+        patterns: "bot.db.*"
+      register: backup_files
+
+    - name: Результат
+      debug:
+        msg:
+          - "✅ Бэкап создан: {{ backup_dir }}/bot.db.{{ ansible_date_time.iso8601_basic_short }}"
+          - "Всего бэкапов: {{ backup_files.matched }}"
+

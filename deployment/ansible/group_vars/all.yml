@@ -1,0 +1,47 @@
+---
+# Общие переменные для всех серверов
+
+# Информация о проекте
+project_name: tg-daily-bot
+project_path: /opt/{{ project_name }}
+project_user: ubuntu
+project_group: ubuntu
+
+# Git настройки
+git_repo: "https://github.com/Fessan/tg-daily-bot-.git"
+git_branch: main
+
+# Docker настройки
+docker_compose_version: "2.24.0"
+use_docker_compose_v2: true
+
+# Директории для данных
+data_dir: "{{ project_path }}/data"
+logs_dir: "{{ project_path }}/logs"
+backup_dir: "{{ project_path }}/backups"
+
+# Настройки бэкапов
+backup_enabled: true
+backup_retention_days: 30
+
+# Telegram Bot токен (ВАЖНО: замените на ваш реальный токен!)
+# Лучше использовать Ansible Vault для безопасного хранения
+# Команда для шифрования: ansible-vault encrypt_string 'your_token' --name 'bot_token'
+bot_token: "{{ vault_bot_token | default('REPLACE_WITH_YOUR_TOKEN') }}"
+
+# Дополнительные переменные окружения для бота
+bot_env_vars:
+  BOT_TOKEN: "{{ bot_token }}"
+  DB_PATH: "/app/data/bot.db"
+  LOG_FILE: "/app/logs/bot.log"
+  TIMEZONE: "Europe/Moscow"
+  LOG_LEVEL: "INFO"
+
+# Настройки безопасности
+firewall_enabled: true
+fail2ban_enabled: true
+
+# Мониторинг и алерты (опционально)
+monitoring_enabled: false
+healthcheck_url: ""
+
