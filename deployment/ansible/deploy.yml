@@ -276,6 +276,7 @@
       wait_for:
         timeout: 30
       delegate_to: localhost
+      become: false
 
     - name: Проверка статуса контейнера
       community.docker.docker_container_info:
