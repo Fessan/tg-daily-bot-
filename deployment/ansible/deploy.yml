@@ -261,12 +261,16 @@
         project_src: "{{ project_path }}"
         build: always
       become_user: "{{ project_user }}"
+      environment:
+        DOCKER_HOST: "unix:///var/run/docker.sock"
 
     - name: Запуск контейнера
       community.docker.docker_compose_v2:
         project_src: "{{ project_path }}"
         state: present
       become_user: "{{ project_user }}"
+      environment:
+        DOCKER_HOST: "unix:///var/run/docker.sock"
 
     # ============================================================
     # 9. ПРОВЕРКА ЗДОРОВЬЯ
