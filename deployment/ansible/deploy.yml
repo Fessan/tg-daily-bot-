@@ -281,6 +281,7 @@
     - name: Проверка статуса контейнера
       community.docker.docker_container_info:
         name: "{{ project_name }}"
+        docker_host: "unix:///var/run/docker.sock"
       register: container_info
       become_user: "{{ project_user }}"
 
