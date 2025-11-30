@@ -96,3 +96,12 @@ class TestDeleteLater:
         
         mock_msg.delete.assert_called_once()
 
+
+
+
+
+
+
+
+
+

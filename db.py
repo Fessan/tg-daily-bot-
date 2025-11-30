@@ -2,9 +2,10 @@ import aiosqlite
 import logging
 from aiogram import Bot
 
+from config import DB_PATH
+
 logger = logging.getLogger(__name__)
 
-DB_PATH = "bot.db"
 DB_VERSION = 1  # Версия схемы базы данных
 
 async def init_db():

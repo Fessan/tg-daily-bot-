@@ -1,18 +1,36 @@
+# Python
 venv/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Environment
 .env
+.env.*
+!.env.example
+
+# Database and logs
 bot.db
 bot.log
+*.db-journal
+*.db-wal
+*.db-shm
+data/
+logs/
+backups/
 
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
-*.db-journal
-*.db-wal
-*.db-shm
-*.egg-info/
+.tox/
 
 # IDE
 .vscode/
@@ -20,8 +38,27 @@ htmlcov/
 *.swp
 *.swo
 *~
+.project
+.pydevproject
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Docker
+*.log
+*.pid
+docker-compose.override.yml
+
+# Ansible
+deployment/ansible/group_vars/vault.yml
+deployment/ansible/.vault_pass
+deployment/ansible/ansible.log
+deployment/ansible/retry/
+deployment/ansible/*.retry
+
+# Backups
+*.backup
+*.bak
+*.old
 

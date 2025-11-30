@@ -133,3 +133,10 @@ ansible-galaxy collection install -r requirements.yml
 **Подробная документация:** `DEPLOYMENT.md` и `DEPLOYMENT_CHECKLIST.md`
 
 
+
+
+
+
+
+
+

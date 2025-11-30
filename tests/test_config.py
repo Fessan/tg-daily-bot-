@@ -90,3 +90,12 @@ class TestConfigValidation:
         assert config.BOT_TOKEN
         assert len(config.BOT_TOKEN.strip()) > 0
 
+
+
+
+
+
+
+
+
+

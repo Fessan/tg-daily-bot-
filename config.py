@@ -16,11 +16,11 @@ if not BOT_TOKEN:
         "Создайте .env файл с BOT_TOKEN=ваш_токен"
     )
 
-# Путь к базе данных
-DB_PATH = "bot.db"
+# Путь к базе данных (можно переопределить через .env)
+DB_PATH = os.getenv("DB_PATH", "bot.db")
 
-# Временная зона
-TIMEZONE = "Europe/Moscow"
+# Временная зона (можно переопределить через .env)
+TIMEZONE = os.getenv("TIMEZONE", "Europe/Moscow")
 
 # Интервалы времени (в секундах/часах)
 DAILY_CHECK_INTERVAL_HOURS = 2      # Через сколько часов проверять отчеты
@@ -37,8 +37,8 @@ DAILY_TEXT = (
     "3. Что планируете делать?"
 )
 
-# Логирование
-LOG_FILE = "bot.log"
-LOG_LEVEL = "INFO"
+# Логирование (можно переопределить через .env)
+LOG_FILE = os.getenv("LOG_FILE", "bot.log")
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 

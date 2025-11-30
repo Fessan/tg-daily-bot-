@@ -124,3 +124,12 @@ async def cmd_report(message: Message, command: CommandObject):
     
     logger.info(f"Отчеты за {date_str} отправлены пользователю {message.from_user.id} для чата {chat_id}")
 
+
+
+
+
+
+
+
+
+

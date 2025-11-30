@@ -270,3 +270,12 @@ class TestEnsureAdminsInDb:
         # Восстанавливаем
         config.DB_PATH = original
 
+
+
+
+
+
+
+
+
+
