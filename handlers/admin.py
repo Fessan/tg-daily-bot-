@@ -45,13 +45,19 @@ async def cmd_start(message: Message):
             row = await cursor.fetchone()
             logger.info(f"Чат из базы: {row}")
         
-        # Добавляем всех админов как участников (active=True, is_admin=True)
+        # Добавляем всех админов как участников (active=False, is_admin=True)
         added = 0
         async with aiosqlite.connect(DB_PATH) as db:
             for admin in admins:
                 await db.execute(
                     "INSERT OR IGNORE INTO participants (chat_id, user_id, username, active, is_admin) VALUES (?, ?, ?, ?, ?)",
-                    (message.chat.id, admin.user.id, admin.user.username or admin.user.full_name, True, True)
+                    (
+                        message.chat.id,
+                        admin.user.id,
+                        admin.user.username or admin.user.full_name,
+                        False,  # админы по умолчанию не в активных, чтобы не получать напоминания
+                        True,
+                    )
                 )
                 added += 1
             await db.commit()
@@ -368,4 +374,3 @@ async def cmd_list_all(message: Message):
         await message.answer(
             "Не удалось отправить список участников в личку. Напишите боту в ЛС (например, /start), чтобы получать личные сообщения."
         )
-
