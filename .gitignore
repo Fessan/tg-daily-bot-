@@ -62,3 +62,9 @@ deployment/ansible/*.retry
 *.bak
 *.old
 
+# Secrets
+secrets.env
+# Backups
+*.sql
+*.rdb
+*.tar.gz

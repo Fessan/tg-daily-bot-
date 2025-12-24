@@ -55,3 +55,4 @@ networks:
     name: tg-daily-bot-network
     driver: bridge
 
+    enable_ipv6: true
