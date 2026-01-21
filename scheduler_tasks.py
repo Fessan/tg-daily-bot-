@@ -82,11 +82,19 @@ async def send_scheduled_daily(chat_id):
     date_today = datetime.now(pytz_timezone(TIMEZONE)).strftime("%Y-%m-%d")
     
     # Планируем проверку отчетов через N часов
+    def make_check_job(cid, msg_id, date):
+        """Фабрика для создания job проверки отчетов с правильным замыканием"""
+        def job():
+            asyncio.run_coroutine_threadsafe(
+                check_daily_reports(cid, msg_id, date),
+                bot_instance.loop
+            )
+        return job
+    
     scheduler.add_job(
-        check_daily_reports,
+        make_check_job(chat_id, last_daily_message_id, date_today),
         "date",
-        run_date=datetime.now(pytz_timezone(TIMEZONE)) + timedelta(hours=DAILY_CHECK_INTERVAL_HOURS),
-        args=[chat_id, last_daily_message_id, date_today]
+        run_date=datetime.now(pytz_timezone(TIMEZONE)) + timedelta(hours=DAILY_CHECK_INTERVAL_HOURS)
     )
     logger.info(f"Дэйлик отправлен по расписанию в чат {chat_id}")
 

@@ -22,7 +22,10 @@ async def handle_reply(message: Message):
     Сохраняет отчеты в базу данных и управляет статусом участников
     """
     # Проверяем, что это reply на сообщение бота
-    if not message.reply_to_message or message.reply_to_message.from_user.id != bot.id:
+    # from_user может быть None для анонимных сообщений каналов
+    if (not message.reply_to_message or 
+        not message.reply_to_message.from_user or 
+        message.reply_to_message.from_user.id != bot.id):
         return
     
     # Разрешаем только reply на дейлик или напоминание

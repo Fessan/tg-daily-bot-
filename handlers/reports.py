@@ -50,9 +50,6 @@ async def cmd_mychats(message: Message):
 @dp.message(Command("report"))
 async def cmd_report(message: Message, command: CommandObject):
     """Получить отчеты за указанную дату"""
-    # Сначала добавим всех админов в participants
-    await ensure_admins_in_db(bot, message.chat.id)
-
     # Проверка, что только админ может вызвать команду
     if message.chat.type == "private":
         # В ЛС: admin может получить отчёт только по чатам, где он админ
@@ -60,7 +57,16 @@ async def cmd_report(message: Message, command: CommandObject):
         if not args:
             await message.answer("Используй: /report <chat_id> [дата в формате YYYY-MM-DD]")
             return
-        chat_id = args[0]
+        
+        # Валидация chat_id как числа
+        chat_id_str = args[0]
+        try:
+            int(chat_id_str)  # Проверяем что это число
+            chat_id = chat_id_str
+        except ValueError:
+            await message.answer("chat_id должен быть числом. Используй /mychats чтобы узнать chat_id.")
+            return
+        
         # Проверяем, админ ли пользователь в этом чате
         async with aiosqlite.connect(DB_PATH) as db:
             cursor = await db.execute("""
@@ -75,7 +81,8 @@ async def cmd_report(message: Message, command: CommandObject):
         if len(args) > 1:
             date_str = args[1]
     else:
-        # В группе: admin — это тот, кто сейчас админ через Telegram API
+        # В группе: синхронизируем админов и проверяем права
+        await ensure_admins_in_db(bot, message.chat.id)
         chat_id = str(message.chat.id)
         args = (command.args or "").strip().split()
         if args:

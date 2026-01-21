@@ -39,28 +39,28 @@ async def cmd_start(message: Message):
             "INSERT OR IGNORE INTO chats (chat_id, chat_title, daily_time) VALUES (?, ?, ?)",
             (message.chat.id, message.chat.title, None)
         )
-        await db.commit()
+        
         # Получаем чат из базы для проверки и выводим в лог
-        async with db.execute("SELECT * FROM chats WHERE chat_id = ?", (message.chat.id,)) as cursor:
-            row = await cursor.fetchone()
-            logger.info(f"Чат из базы: {row}")
+        cursor = await db.execute("SELECT * FROM chats WHERE chat_id = ?", (message.chat.id,))
+        row = await cursor.fetchone()
+        logger.info(f"Чат из базы: {row}")
         
         # Добавляем всех админов как участников (active=False, is_admin=True)
         added = 0
-        async with aiosqlite.connect(DB_PATH) as db:
-            for admin in admins:
-                await db.execute(
-                    "INSERT OR IGNORE INTO participants (chat_id, user_id, username, active, is_admin) VALUES (?, ?, ?, ?, ?)",
-                    (
-                        message.chat.id,
-                        admin.user.id,
-                        admin.user.username or admin.user.full_name,
-                        False,  # админы по умолчанию не в активных, чтобы не получать напоминания
-                        True,
-                    )
+        for admin in admins:
+            await db.execute(
+                "INSERT OR IGNORE INTO participants (chat_id, user_id, username, active, is_admin) VALUES (?, ?, ?, ?, ?)",
+                (
+                    message.chat.id,
+                    admin.user.id,
+                    admin.user.username or admin.user.full_name,
+                    False,  # админы по умолчанию не в активных, чтобы не получать напоминания
+                    True,
                 )
-                added += 1
-            await db.commit()
+            )
+            added += 1
+        
+        await db.commit()
         logger.info(f"Добавлено админов в чат {message.chat.id}: {added}")
 
     await message.answer("Бот успешно активирован! (пока только тест)")
